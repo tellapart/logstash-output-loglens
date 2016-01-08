@@ -18,6 +18,7 @@ class LogStash::Outputs::LoglensPublic < LogStash::Outputs::Base
 
   #Parameters you can specify in the logstash configuration
   config :url, :validate => :string
+  config :category, :validate => :string
   config :index, :validate => :string
   config :oauth2_token, :validate => :string
   config :is_debug, :validate => :boolean
@@ -31,12 +32,15 @@ class LogStash::Outputs::LoglensPublic < LogStash::Outputs::Base
     $stdout.puts("url: " + @url)
     $stdout.puts("loglens index: " + @index)
     $stdout.puts
-    @loglensConnector = LoglensConnector.new(@url, @oauth2_token)
+    @loglensConnector = LoglensConnector.new(@url, @oauth2_token, @category)
   end # def register
 
   public
   def receive(event)
-    return if event == LogStash::SHUTDOWN
+    if event == LogStash::SHUTDOWN
+      @loglensConnector.close()
+      return
+    end
 
     loglensMessage = Hash.new
     loglensMessage["index"] = @index
