@@ -33,22 +33,25 @@ gem build logstash-output-loglens.gemspec
 ### Run the Loglens Logstash plugin
 - Create Logstash config file, e.g.
 ```sh
+# a random input... e.g. a file
 input {
-     file {
-       path => "/vagrant/test.log"
-     }
-   }
+  file {
+    path => "some file"
+  }
+}
 
-   output {
-     loglens {
-       url => "the url"
-       index => "loglens index"
-       oauth2_token => "your oauth2 bearer token"
-       is_debug => true #if true it will just print to stdout what it would send
-     }
-   }
+#the config of the loglens output plugin
+output {
+  loglens {
+    url => "the url"
+    index => "loglens index"
+    category => "loglens" # the scribe category
+    oauth2_token => "your oauth2 bearer token"
+    is_debug => true # if true it will just print to stdout what it would send
+  }
+}
 ```
 - Start Logstash and proceed to test the plugin
 ```sh
-/path/to/logstash/bin/bin/logstash -f <configfile>
+/path/to/logstash/bin/logstash -f <configfile>
 ```
