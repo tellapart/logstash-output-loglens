@@ -124,7 +124,7 @@ public class LoglensConnector {
           scribeClient.Log(toSend);
         } catch (Exception e) {
           System.err.println(e);
-          System.err.println(ZonedDateTime.now() + " Fail to send " + toSend.size() + " messages, buffer size: " + queue.size());
+          System.err.println(ZonedDateTime.now() + " Failed to send " + toSend.size() + " messages, buffer size: " + queue.size());
           queue.addAll(toSend);  // add messages in toSend back to the queue
           if (log == null) {
             log = queue.poll();
