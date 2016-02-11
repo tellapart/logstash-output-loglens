@@ -3,7 +3,6 @@
  */
 package com.twitter.loglens;
 
-import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.THttpClient;
 import org.apache.thrift.transport.TTransportException;
@@ -12,6 +11,7 @@ import scribe.thrift.LogEntry;
 
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 
@@ -19,15 +19,16 @@ import java.util.concurrent.ExecutorService;
  * A simple class to that send messages to a scribe endpoint using thrift over https
  */
 public class LoglensConnector {
-  private static final int MAX_BUFFER_SIZE = 5000;
+
+  private static final int MAX_NO_MESSAGES_PER_CALL = 20;
+  private static final int MAX_BUFFER_SIZE = 1000000;
 
   private String url;
   private String authorization;
   private String category;
-  private Object bufferLock = new Object();
 
-  private volatile ArrayList<LogEntry> buffer;
   private final ExecutorService exec = Executors.newFixedThreadPool(1);
+  private final ConcurrentLinkedQueue<LogEntry> queue = new ConcurrentLinkedQueue<LogEntry>();
 
   private Client scribeClient;
   private THttpClient transport;
@@ -37,9 +38,6 @@ public class LoglensConnector {
     this.url = url;
     this.authorization = "Bearer " + bearerToken;
     this.category = scribeCategory;
-    synchronized (bufferLock) {
-      buffer = new ArrayList<LogEntry>();
-    }
     try {
       open();
     } catch (TTransportException e)
@@ -83,47 +81,53 @@ public class LoglensConnector {
   }
 
   /**
-   * Puts message in a buffer and sends is async
+   * Puts message in a queue and send them async
    * @param message
    */
   public void sendMessage(String message) {
-    synchronized (bufferLock) {
-      buffer.add(new LogEntry(this.category, message));
-    }
+    queue.offer(new LogEntry(this.category, message));
     exec.execute(sendMessageAsync);
   }
 
   /**
-   * Sends messages in the buffer
+   * Sends messages in the queue
    */
   private Runnable sendMessageAsync = new Runnable() {
     public void run() {
-      ArrayList<LogEntry> toSend;
-      synchronized (bufferLock)
-      {
-        if (buffer.isEmpty()){
-          return;
-        } else {
-          toSend = buffer;
-          buffer = new ArrayList<LogEntry>();
-        }
-      }
-      try {
-        if (!transport.isOpen())
+      LogEntry log = queue.poll();
+      while (log != null) {
+        int queueSize = queue.size();
+        if (queueSize > MAX_BUFFER_SIZE)
         {
-          System.err.println("Opening new connection.");
-          open();
+          queue.clear();
+          System.err.println(ZonedDateTime.now() + " Log buffer too big, purged! " + queueSize);
+          return;
         }
-        scribeClient.Log(toSend);
-      } catch (Exception e) {
-        System.err.println(e);
-        System.err.println(ZonedDateTime.now() + " Buffered Messages: " + toSend.size() );
-        if (toSend.size() > MAX_BUFFER_SIZE) {
-          System.err.println("Purged Buffer");
-        } else if (!toSend.isEmpty()) {
-          synchronized (bufferLock) {
-            buffer.addAll(toSend);  // add messages in toSend back to the buffer
-                                    // since they were not sent
+
+        ArrayList<LogEntry> toSend = new ArrayList<LogEntry>();
+        int n = 0;
+
+        while (log != null && n < MAX_NO_MESSAGES_PER_CALL) {
+          // scribeClient.log takes a list, however the twitter api rejects
+          // requests that are too long, so we only send MAX_NO_MESSAGES_PER_CALL
+          // logs at a time...
+          toSend.add(log);
+          log = queue.poll();
+          n++;
+        }
+
+        try {
+          if (!transport.isOpen()) {
+            System.err.println("Opening new connection.");
+            open();
+          }
+          scribeClient.Log(toSend);
+        } catch (Exception e) {
+          System.err.println(e);
+          System.err.println(ZonedDateTime.now() + " Fail to send " + toSend.size() + " messages, buffer size: " + queue.size());
+          queue.addAll(toSend);  // add messages in toSend back to the queue
+          if (log == null) {
+            log = queue.poll();
           }
         }
       }
