@@ -9,7 +9,7 @@ import org.apache.thrift.transport.TTransportException;
 import scribe.thrift.scribe.Client;
 import scribe.thrift.LogEntry;
 
-import java.time.ZonedDateTime;
+import org.joda.time.DateTime;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
@@ -55,7 +55,7 @@ public class LoglensConnector {
       transport.open();
       scribeClient = new Client(protocol);
     } catch (TTransportException e) {
-      System.err.println(ZonedDateTime.now() + "Failed to open new connection");
+      System.err.println(DateTime.now() + "Failed to open new connection");
       throw e;
     }
   }
@@ -100,7 +100,7 @@ public class LoglensConnector {
         if (queueSize > MAX_BUFFER_SIZE)
         {
           queue.clear();
-          System.err.println(ZonedDateTime.now() + " Log buffer too big, purged! " + queueSize);
+          System.err.println(DateTime.now() + " Log buffer too big, purged! " + queueSize);
           return;
         }
 
@@ -124,7 +124,7 @@ public class LoglensConnector {
           scribeClient.Log(toSend);
         } catch (Exception e) {
           System.err.println(e);
-          System.err.println(ZonedDateTime.now() + " Failed to send " + toSend.size() + " messages, buffer size: " + queue.size());
+          System.err.println(DateTime.now() + " Failed to send " + toSend.size() + " messages, buffer size: " + queue.size());
           queue.addAll(toSend);  // add messages in toSend back to the queue
           if (log == null) {
             log = queue.poll();
