@@ -49,7 +49,6 @@ public class LoglensConnector {
   private void open() throws TTransportException{
     try {
       transport = new THttpClient(this.url);
-      transport.setCustomHeader("X-B3-Flags", "1");
       transport.setCustomHeader("Authorization", authorization);
       TBinaryProtocol protocol = new TBinaryProtocol(transport);
       transport.open();
